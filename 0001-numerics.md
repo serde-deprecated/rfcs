@@ -14,7 +14,12 @@ There is the set `A` of number representations that the serialization formats us
 
 Ideally we'd have a function `f(A) -> B` and `f'(B) -> A`. Obviously that makes little sense, as it would require serde to know about all possible types. So instead we have a set `S` that contains all basic rust number types and  `f(A) -> S`, `f'(S)->A` as well as `g(B) -> S`, `g'(S) -> B`.
 
-Right now we are discussing what `B` should contain and how to represent it. The problem I'm seeing is that we are discussing the memory representation instead of the abstract representation. There will never be a perfect memory representation that fits all needs (e.g. `BigNum` can represent all numbers, but requires memory allocation). We'll always have to do tradeoffs. The tradeoff decision shouldn't really be made by `serde` or an implementor, but by the final user. We could of course get there through a huge `cfg!` madness, but I have a proposal (no concrete design, just some thoughts):
+Right now we are discussing what `B` should contain and how to represent it.
+The problem I'm seeing is that we are discussing the memory representation instead of the abstract representation.
+There will never be a perfect memory representation that fits all needs (e.g. `BigNum` can represent all numbers, but requires memory allocation).
+We'll always have to do tradeoffs.
+The tradeoff decision shouldn't really be made by `serde` or an implementor, but by the final user.
+We could of course get there through a huge `cfg!` madness, but a clean redesign should satisfy everyone's needs without overhead.
 
 # Detailed design
 
@@ -38,11 +43,11 @@ trait NumericSerialization: core::fmt::Display {
     /// yields a value of the above struct
     /// FIXME: use associated constant once that's stable
     fn type_info() -> &'static NumericTypeInfo<Self>;
-    /// yields the number of bits required to hold this value
+    /// yields the number of bits required to hold this *value*
     fn num_bits(&self) -> u64;
-    /// whether the value is signed
+    /// whether the *value* is smaller than `0`
     fn is_signed(&self) -> bool;
-    /// whether the value is integral
+    /// whether the *value* is integral
     fn is_integral(&self) -> bool;
     /// yield an f64 representation of the value if that can be done losslessly
     fn as_f64(&self) -> Option<f64>;
@@ -57,9 +62,14 @@ trait NumericSerialization: core::fmt::Display {
 }
 ```
 
-With this information any numeric type can offer enough information for a `Serializer` to decide how to proceed. It's important to use static dispatch when passing this value (no other way anyway, it's not object safe, let's keep it this way). Static dispatch helps optimizing out the entire thing.
+With this information any numeric type can offer enough information for a `Serializer` to decide how to proceed.
+The `Serializer` would then remove all `serialize_*` methods for integers and floats and instead have a single
+`fn serialize_numeric<V>(&mut self, value: &V) where V: NumericSerialization` that one calls with the value that
+is to be serialized.
+It's important to use static dispatch when passing this value (there is no other way anyway, because it's not object safe, let's keep it this way).
+Static dispatch helps optimizing out the indirections.
 
-Deserialization needs the design in reverse. The trait `NumericDeserialization` is again implemented for concrete types. 
+Deserialization needs the design in reverse. The trait `NumericDeserialization` is again implemented for concrete types.
 
 ```rust
 trait NumericDeserialization {
@@ -82,9 +92,11 @@ More layers of indirection. Newcomers to serde that want to manually build `Seri
 # Alternatives
 
 ## Bignum
+
 Can represent any number, but requires heap allocations
 
 ## String rep
+
 Can represent any number, but some formats (like bincode) have a binary two complement representation, converting that to a string is not a good solution.
 
 # Unresolved questions
