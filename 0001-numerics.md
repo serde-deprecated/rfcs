@@ -55,6 +55,9 @@ trait NumericSerialization: core::fmt::Display {
     fn as_u64(&self) -> Option<u64>;
     /// yield an i64 representation of the value if that can be done losslessly
     fn as_i64(&self) -> Option<i64>;
+    /// yields the integral and decimal parts of this value
+    /// FIXME: use `impl NumericSerialization` instead of `Box<NumericSerialization>`
+    fn split_at_decimal(&self) -> (Box<NumericSerialization>, Box<NumericSerialization>);
     /// Iterate over the bits starting with the least significant one
     /// This function uses a closure until we get `impl Trait` return types
     /// FIXME: add more bounds to the `Iterator` to allow things like `.rev()`
@@ -80,6 +83,7 @@ trait NumericDeserialization {
     fn from_u64(u64) -> Self;
     fn from_f64(f64) -> Self;
     fn from_i64(i64) -> Self;
+    fn from_decimal(int: &NumericDeserialization, dec: &NumericDeserialization) -> Self;
 }
 ```
 
